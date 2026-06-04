@@ -15,8 +15,11 @@ type Props = {
 }
 
 export default function ResultScreen({ result, profile, onReplay, onChangeGrade }: Props) {
-  const [globalRank, setGlobalRank] = useState<RankInfo | null>(null)
-  const [gradeRank, setGradeRank] = useState<RankInfo | null>(null)
+  const [currentRank, setCurrentRank] = useState<RankInfo | null>(null)   // 今回のスコアの順位
+  const [bestRank, setBestRank] = useState<RankInfo | null>(null)          // ベストスコアの順位
+  const [bestScore, setBestScore] = useState<number>(result.score)         // 自分のベストスコア
+  const [currentGradeRank, setCurrentGradeRank] = useState<RankInfo | null>(null)
+  const [bestGradeRank, setBestGradeRank] = useState<RankInfo | null>(null)
   const [saving, setSaving] = useState(true)
   const savedRef = useRef(false)
 
@@ -27,51 +30,57 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
     async function saveAndRank() {
       setSaving(true)
       try {
-        // 全プレイ履歴をINSERT（ベストスコア管理はランキング集計時に行う）
-        await supabase.from('scores').insert({
+        // 既存のベストスコアを取得
+        const { data: existing } = await supabase
+          .from('scores')
+          .select('score')
+          .eq('user_id', profile.id)
+          .eq('grade_challenged', result.gradeChallenge)
+          .single()
+
+        const prevBest = existing?.score ?? 0
+        const newBest = Math.max(prevBest, result.score)
+        setBestScore(newBest)
+
+        // ベストスコアのみupsert（1人1レコード）
+        await supabase.from('scores').upsert({
           user_id: profile.id,
           user_grade: profile.grade,
           grade_challenged: result.gradeChallenge,
-          score: result.score,
+          score: newBest,
           correct_count: result.correctCount,
           max_combo: result.maxCombo,
           prefecture: profile.prefecture,
           city: profile.city,
-        })
+        }, { onConflict: 'user_id,grade_challenged' })
 
-        // 全スコアを取得してユーザーごとのベストスコアに集約してからランキング計算
-        const { data: allScores } = await supabase
+        // 全ユーザーのベストスコア一覧を取得（自分を除く）
+        const { data: othersScores } = await supabase
           .from('scores')
           .select('user_id, user_grade, score')
           .eq('grade_challenged', result.gradeChallenge)
+          .neq('user_id', profile.id)
 
-        if (allScores) {
-          // ユーザーごとにベストスコアだけ残す（自分は除外）
-          const bestMap = new Map<string, { user_id: string; user_grade: number; score: number }>()
-          for (const s of allScores) {
-            if (s.user_id === profile.id) continue // 自分は後で今回のスコアで比較
-            const current = bestMap.get(s.user_id)
-            if (!current || s.score > current.score) {
-              bestMap.set(s.user_id, s)
-            }
-          }
+        const others = othersScores ?? []
 
-          // 今回のスコアを含めた全体リストを作り、スコア降順でソート
-          const others = [...bestMap.values()]
-          const myEntry = { user_id: profile.id, user_grade: profile.grade, score: result.score }
-          const allBest = [...others, myEntry].sort((a, b) => b.score - a.score)
+        // ---- 全体ランキング ----
+        // 今回のスコアが何位か
+        const currentGlobalRank = others.filter(s => s.score > result.score).length + 1
+        setCurrentRank({ rank: currentGlobalRank, total: others.length + 1 })
 
-          // 全体ランキング（今回のスコアで何位か）
-          const globalTotal = allBest.length
-          const globalRankIdx = allBest.findIndex(s => s.user_id === profile.id)
-          if (globalRankIdx >= 0) setGlobalRank({ rank: globalRankIdx + 1, total: globalTotal })
+        // ベストスコアが何位か
+        const bestGlobalRank = others.filter(s => s.score > newBest).length + 1
+        setBestRank({ rank: bestGlobalRank, total: others.length + 1 })
 
-          // 自分の学年内ランキング
-          const gradeList = allBest.filter(s => s.user_grade === profile.grade)
-          const gradeTotal = gradeList.length
-          const gradeRankIdx = gradeList.findIndex(s => s.user_id === profile.id)
-          if (gradeRankIdx >= 0) setGradeRank({ rank: gradeRankIdx + 1, total: gradeTotal })
-        }
+        // ---- 学年内ランキング ----
+        const gradeOthers = others.filter(s => s.user_grade === profile.grade)
+
+        const currentGradeRankVal = gradeOthers.filter(s => s.score > result.score).length + 1
+        setCurrentGradeRank({ rank: currentGradeRankVal, total: gradeOthers.length + 1 })
+
+        const bestGradeRankVal = gradeOthers.filter(s => s.score > newBest).length + 1
+        setBestGradeRank({ rank: bestGradeRankVal, total: gradeOthers.length + 1 })
+
       } catch (e) {
         console.error(e)
       } finally {
@@ -81,6 +90,8 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
     saveAndRank()
   }, [result, profile])
 
+  const isNewBest = result.score >= bestScore
+
   return (
     <div className="flex flex-col items-center min-h-screen p-6 max-w-sm mx-auto">
       <h2 className="text-2xl font-black text-indigo-700 mt-8 mb-1">結果発表！</h2>
@@ -88,9 +99,13 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
 
       {/* Score */}
       <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-8 w-full text-center shadow-xl mb-4">
-        <div className="text-white text-sm font-bold mb-1">スコア</div>
+        {isNewBest && <div className="text-yellow-300 font-black text-sm mb-1">🎉 新記録！</div>}
+        <div className="text-white text-sm font-bold mb-1">今回のスコア</div>
         <div className="text-white text-8xl font-black tabular-nums">{result.score}</div>
         <div className="text-indigo-200 text-sm">点</div>
+        {!isNewBest && (
+          <div className="text-indigo-200 text-sm mt-2">ベスト: {bestScore}点</div>
+        )}
       </div>
 
       {/* Stats */}
@@ -113,22 +128,49 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
         {saving ? (
           <div className="text-center text-gray-400 py-4">集計中…</div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">🌐 全体</span>
-              {globalRank ? (
-                <span className="font-black text-indigo-600">
-                  {globalRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {globalRank.total}人</span>
-                </span>
-              ) : <span className="text-gray-400 text-sm">—</span>}
+          <div className="space-y-4">
+            {/* 今回のスコア */}
+            <div>
+              <div className="text-xs font-bold text-gray-400 mb-1">🎯 今回（{result.score}点）</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">🌐 全体</span>
+                {currentRank && (
+                  <span className="font-black text-indigo-600">
+                    {currentRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {currentRank.total}人</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-sm text-gray-600">📚 小{profile.grade}年生の中で</span>
+                {currentGradeRank && (
+                  <span className="font-black text-purple-600">
+                    {currentGradeRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {currentGradeRank.total}人</span>
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">📚 小{profile.grade}年生の中で</span>
-              {gradeRank ? (
-                <span className="font-black text-purple-600">
-                  {gradeRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {gradeRank.total}人</span>
-                </span>
-              ) : <span className="text-gray-400 text-sm">—</span>}
+
+            <div className="border-t border-gray-100" />
+
+            {/* ベストスコア */}
+            <div>
+              <div className="text-xs font-bold text-gray-400 mb-1">🏆 ベスト（{bestScore}点）</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">🌐 全体</span>
+                {bestRank && (
+                  <span className="font-black text-indigo-600">
+                    {bestRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {bestRank.total}人</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-sm text-gray-600">📚 小{profile.grade}年生の中で</span>
+                {bestGradeRank && (
+                  <span className="font-black text-purple-600">
+                    {bestGradeRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {bestGradeRank.total}人</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )}
