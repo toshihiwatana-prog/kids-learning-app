@@ -49,7 +49,7 @@ export default function App() {
       {screen === 'title' && <TitleScreen onStart={handleStart} />}
       {screen === 'profile' && <ProfileScreen onComplete={handleProfileComplete} />}
       {screen === 'grade-select' && profile && (
-        <GradeSelectScreen userGrade={profile.grade} onSelect={handleGradeSelect} />
+        <GradeSelectScreen profile={profile} onSelect={handleGradeSelect} />
       )}
       {screen === 'countdown' && (
         <CountdownScreen key={gradeChallenge + Date.now()} onComplete={handleCountdownComplete} />

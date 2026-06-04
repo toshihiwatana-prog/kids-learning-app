@@ -7,7 +7,12 @@
       "Bash(sleep 3 && cat /c/Users/twata/AppData/Local/Temp/claude/C--Claude-Kids-Study/5329fa69-94ef-4806-8165-5a74cd8b57d3/tasks/bs983f9pl.output 2>&1 | head -20)",
       "mcp__Claude_Preview__preview_start",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git config *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)"
     ]
   }
 }
