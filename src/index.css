@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-gradient-to-b from-blue-50 to-indigo-100 min-h-screen;
+    font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Meiryo', sans-serif;
+  }
+}
