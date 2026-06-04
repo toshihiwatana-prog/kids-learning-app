@@ -40,17 +40,35 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
         const newBest = Math.max(prevBest, result.score)
         setIsNewBest(result.score > prevBest)
 
-        // ベストスコアのみupsert（1人1レコード）
-        await supabase.from('scores').upsert({
-          user_id: profile.id,
-          user_grade: profile.grade,
-          grade_challenged: result.gradeChallenge,
-          score: newBest,
-          correct_count: result.correctCount,
-          max_combo: result.maxCombo,
-          prefecture: profile.prefecture,
-          city: profile.city,
-        }, { onConflict: 'user_id,grade_challenged' })
+        // ベストスコアのみ保存（既存あればUPDATE、なければINSERT）
+        if (existing) {
+          // 既存レコードがある場合：スコアが更新された時だけUPDATE
+          if (result.score > prevBest) {
+            const { error: updateError } = await supabase
+              .from('scores')
+              .update({
+                score: newBest,
+                correct_count: result.correctCount,
+                max_combo: result.maxCombo,
+              })
+              .eq('user_id', profile.id)
+              .eq('grade_challenged', result.gradeChallenge)
+            if (updateError) console.error('UPDATE error:', updateError)
+          }
+        } else {
+          // 初回プレイ：INSERT
+          const { error: insertError } = await supabase.from('scores').insert({
+            user_id: profile.id,
+            user_grade: profile.grade,
+            grade_challenged: result.gradeChallenge,
+            score: newBest,
+            correct_count: result.correctCount,
+            max_combo: result.maxCombo,
+            prefecture: profile.prefecture,
+            city: profile.city,
+          })
+          if (insertError) console.error('INSERT error:', insertError)
+        }
 
         // 他ユーザーのベストスコア一覧を取得
         const { data: othersScores } = await supabase

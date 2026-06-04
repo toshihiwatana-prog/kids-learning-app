@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { supabase } from './lib/supabase'
 import type { Screen, UserProfile, GameResult } from './types'
 import TitleScreen from './screens/TitleScreen'
 import ProfileScreen from './screens/ProfileScreen'
@@ -12,6 +13,49 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [gradeChallenge, setGradeChallenge] = useState(3)
   const [result, setResult] = useState<GameResult | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // 起動時：セッション復元（localStorage → Supabase の順で試みる）
+  useEffect(() => {
+    async function restoreSession() {
+      // まずlocalStorageから復元を試みる
+      const saved = localStorage.getItem('kids_game_profile')
+      if (saved) {
+        try {
+          const p = JSON.parse(saved) as UserProfile
+          // Supabaseセッションが有効か確認
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.user && session.user.id === p.id) {
+            setProfile(p)
+            setLoading(false)
+            return
+          }
+        } catch {}
+      }
+      // localStorageになければSupabaseセッションから復元
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        const { data: user } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+        if (user) {
+          const p: UserProfile = {
+            id: user.id,
+            nickname: user.nickname,
+            grade: user.grade,
+            prefecture: user.prefecture,
+            city: user.city,
+          }
+          setProfile(p)
+          localStorage.setItem('kids_game_profile', JSON.stringify(p))
+        }
+      }
+      setLoading(false)
+    }
+    restoreSession()
+  }, [])
 
   const handleStart = () => {
     setScreen(profile ? 'grade-select' : 'profile')
@@ -19,6 +63,7 @@ export default function App() {
 
   const handleProfileComplete = (p: UserProfile) => {
     setProfile(p)
+    localStorage.setItem('kids_game_profile', JSON.stringify(p))
     setScreen('grade-select')
   }
 
@@ -42,6 +87,14 @@ export default function App() {
 
   const handleChangeGrade = () => {
     setScreen('grade-select')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-4xl animate-spin">🔢</div>
+      </div>
+    )
   }
 
   return (
