@@ -46,24 +46,28 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
           .eq('grade_challenged', result.gradeChallenge)
 
         if (allScores) {
-          // ユーザーごとにベストスコアだけ残す
+          // ユーザーごとにベストスコアだけ残す（自分は除外）
           const bestMap = new Map<string, { user_id: string; user_grade: number; score: number }>()
           for (const s of allScores) {
+            if (s.user_id === profile.id) continue // 自分は後で今回のスコアで比較
             const current = bestMap.get(s.user_id)
             if (!current || s.score > current.score) {
               bestMap.set(s.user_id, s)
             }
           }
-          // スコア降順でソート → これがランキング順
-          const bestList = [...bestMap.values()].sort((a, b) => b.score - a.score)
 
-          // 全体ランキング
-          const globalTotal = bestList.length
-          const globalRankIdx = bestList.findIndex(s => s.user_id === profile.id)
+          // 今回のスコアを含めた全体リストを作り、スコア降順でソート
+          const others = [...bestMap.values()]
+          const myEntry = { user_id: profile.id, user_grade: profile.grade, score: result.score }
+          const allBest = [...others, myEntry].sort((a, b) => b.score - a.score)
+
+          // 全体ランキング（今回のスコアで何位か）
+          const globalTotal = allBest.length
+          const globalRankIdx = allBest.findIndex(s => s.user_id === profile.id)
           if (globalRankIdx >= 0) setGlobalRank({ rank: globalRankIdx + 1, total: globalTotal })
 
           // 自分の学年内ランキング
-          const gradeList = bestList.filter(s => s.user_grade === profile.grade)
+          const gradeList = allBest.filter(s => s.user_grade === profile.grade)
           const gradeTotal = gradeList.length
           const gradeRankIdx = gradeList.findIndex(s => s.user_id === profile.id)
           if (gradeRankIdx >= 0) setGradeRank({ rank: gradeRankIdx + 1, total: gradeTotal })
