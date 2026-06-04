@@ -39,22 +39,31 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
           city: profile.city,
         })
 
-        // ranking_best_scores ビューを使ってベストスコアベースのランキングを取得
-        // ビューは DISTINCT ON (user_id, grade_challenged) で各ユーザーの最高スコアのみを返す
-        const { data: bestScores } = await supabase
-          .from('ranking_best_scores')
+        // 全スコアを取得してユーザーごとのベストスコアに集約してからランキング計算
+        const { data: allScores } = await supabase
+          .from('scores')
           .select('user_id, user_grade, score')
           .eq('grade_challenged', result.gradeChallenge)
-          .order('score', { ascending: false })
 
-        if (bestScores) {
+        if (allScores) {
+          // ユーザーごとにベストスコアだけ残す
+          const bestMap = new Map<string, { user_id: string; user_grade: number; score: number }>()
+          for (const s of allScores) {
+            const current = bestMap.get(s.user_id)
+            if (!current || s.score > current.score) {
+              bestMap.set(s.user_id, s)
+            }
+          }
+          // スコア降順でソート → これがランキング順
+          const bestList = [...bestMap.values()].sort((a, b) => b.score - a.score)
+
           // 全体ランキング
-          const globalTotal = bestScores.length
-          const globalRankIdx = bestScores.findIndex(s => s.user_id === profile.id)
+          const globalTotal = bestList.length
+          const globalRankIdx = bestList.findIndex(s => s.user_id === profile.id)
           if (globalRankIdx >= 0) setGlobalRank({ rank: globalRankIdx + 1, total: globalTotal })
 
           // 自分の学年内ランキング
-          const gradeList = bestScores.filter(s => s.user_grade === profile.grade)
+          const gradeList = bestList.filter(s => s.user_grade === profile.grade)
           const gradeTotal = gradeList.length
           const gradeRankIdx = gradeList.findIndex(s => s.user_id === profile.id)
           if (gradeRankIdx >= 0) setGradeRank({ rank: gradeRankIdx + 1, total: gradeTotal })
