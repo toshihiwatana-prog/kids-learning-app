@@ -11,6 +11,8 @@ type GradeStat = {
   bestScore: number
   globalRank: number
   globalTotal: number
+  gradeRank: number
+  gradeTotal: number
 }
 
 const GRADE_LABELS: Record<number, string> = {
@@ -33,10 +35,10 @@ const GRADE_COLORS: Record<number, string> = {
 
 export default function GradeSelectScreen({ profile, onSelect }: Props) {
   const [stats, setStats] = useState<Record<number, GradeStat>>({})
+  const [rankMode, setRankMode] = useState<'grade' | 'global'>('grade')
 
   useEffect(() => {
     async function fetchStats() {
-      // 自分のベストスコアを全学年分取得
       const { data: myScores } = await supabase
         .from('scores')
         .select('grade_challenged, score')
@@ -48,22 +50,41 @@ export default function GradeSelectScreen({ profile, onSelect }: Props) {
 
       for (const my of myScores) {
         const g = my.grade_challenged
-        // その学年問題で自分より高いスコアの人数を取得
-        const { count } = await supabase
+
+        // 全体：自分より高いスコアの人数
+        const { count: globalAbove } = await supabase
           .from('scores')
           .select('*', { count: 'exact', head: true })
           .eq('grade_challenged', g)
           .gt('score', my.score)
 
-        const { count: total } = await supabase
+        // 全体：総人数
+        const { count: globalTotal } = await supabase
           .from('scores')
           .select('*', { count: 'exact', head: true })
           .eq('grade_challenged', g)
 
+        // 学年内：自分より高いスコアの人数
+        const { count: gradeAbove } = await supabase
+          .from('scores')
+          .select('*', { count: 'exact', head: true })
+          .eq('grade_challenged', g)
+          .eq('user_grade', profile.grade)
+          .gt('score', my.score)
+
+        // 学年内：総人数
+        const { count: gradeTotal } = await supabase
+          .from('scores')
+          .select('*', { count: 'exact', head: true })
+          .eq('grade_challenged', g)
+          .eq('user_grade', profile.grade)
+
         newStats[g] = {
           bestScore: my.score,
-          globalRank: (count ?? 0) + 1,
-          globalTotal: total ?? 1,
+          globalRank: (globalAbove ?? 0) + 1,
+          globalTotal: globalTotal ?? 1,
+          gradeRank: (gradeAbove ?? 0) + 1,
+          gradeTotal: gradeTotal ?? 1,
         }
       }
 
@@ -71,16 +92,42 @@ export default function GradeSelectScreen({ profile, onSelect }: Props) {
     }
 
     fetchStats()
-  }, [profile.id])
+  }, [profile.id, profile.grade])
 
   return (
     <div className="flex flex-col items-center min-h-screen p-6">
       <h2 className="text-3xl font-black text-indigo-700 mt-10 mb-1">学年を選ぼう</h2>
-      <p className="text-gray-500 text-sm mb-8">どの学年の問題に挑戦する？</p>
+      <p className="text-gray-500 text-sm mb-4">どの学年の問題に挑戦する？</p>
+
+      {/* ランク切り替えトグル */}
+      <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
+        <button
+          onClick={() => setRankMode('grade')}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            rankMode === 'grade'
+              ? 'bg-white text-indigo-600 shadow'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          小{profile.grade}年生の中で
+        </button>
+        <button
+          onClick={() => setRankMode('global')}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            rankMode === 'global'
+              ? 'bg-white text-indigo-600 shadow'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          🌐 全体
+        </button>
+      </div>
 
       <div className="w-full max-w-sm space-y-3">
         {[1,2,3,4,5,6].map(g => {
           const stat = stats[g]
+          const rank = stat ? (rankMode === 'grade' ? stat.gradeRank : stat.globalRank) : null
+          const total = stat ? (rankMode === 'grade' ? stat.gradeTotal : stat.globalTotal) : null
           return (
             <button
               key={g}
@@ -101,7 +148,7 @@ export default function GradeSelectScreen({ profile, onSelect }: Props) {
                   {stat ? (
                     <div>
                       <div className="font-black text-lg">{stat.bestScore}点</div>
-                      <div className="text-xs opacity-80">全体{stat.globalRank}位/{stat.globalTotal}人</div>
+                      <div className="text-xs opacity-80">{rank}位/{total}人</div>
                     </div>
                   ) : (
                     <div className="text-sm opacity-70">未挑戦</div>
