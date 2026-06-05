@@ -89,6 +89,11 @@ export default function App() {
     setScreen('grade-select')
   }
 
+  const handleProfileUpdate = (p: UserProfile) => {
+    setProfile(p)
+    localStorage.setItem('kids_game_profile', JSON.stringify(p))
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -102,7 +107,7 @@ export default function App() {
       {screen === 'title' && <TitleScreen onStart={handleStart} />}
       {screen === 'profile' && <ProfileScreen onComplete={handleProfileComplete} />}
       {screen === 'grade-select' && profile && (
-        <GradeSelectScreen profile={profile} onSelect={handleGradeSelect} />
+        <GradeSelectScreen profile={profile} onSelect={handleGradeSelect} onProfileUpdate={handleProfileUpdate} />
       )}
       {screen === 'countdown' && (
         <CountdownScreen key={gradeChallenge + Date.now()} onComplete={handleCountdownComplete} />
