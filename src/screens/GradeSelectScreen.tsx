@@ -96,7 +96,16 @@ export default function GradeSelectScreen({ profile, onSelect }: Props) {
 
   return (
     <div className="flex flex-col items-center min-h-screen p-6">
-      <h2 className="text-3xl font-black text-indigo-700 mt-10 mb-1">学年を選ぼう</h2>
+      {/* プロフィール表示 */}
+      <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-2 shadow-sm mt-8 mb-6">
+        <span className="text-2xl">👤</span>
+        <div>
+          <div className="font-black text-gray-800 text-base leading-tight">{profile.nickname}</div>
+          <div className="text-xs text-gray-400">{profile.prefecture} · 小{profile.grade}年生</div>
+        </div>
+      </div>
+
+      <h2 className="text-3xl font-black text-indigo-700 mb-1">学年を選ぼう</h2>
       <p className="text-gray-500 text-sm mb-4">どの学年の問題に挑戦する？</p>
 
       {/* ランク切り替えトグル */}
