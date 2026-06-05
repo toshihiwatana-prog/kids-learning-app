@@ -136,9 +136,40 @@ export default function GameScreen({ grade, onComplete }: Props) {
           feedback === 'correct' ? 'bg-green-100' : feedback === 'wrong' ? 'bg-red-100' : 'bg-white'
         } shadow-lg`}
       >
-        <div className="text-center">
-          <div className="text-5xl font-black text-gray-800 mb-6">{question.expression}</div>
-          <div className="text-right">
+        {question.vertical ? (
+          // 筆算レイアウト
+          <div className="inline-grid font-mono font-black text-gray-800"
+            style={{ gridTemplateColumns: 'auto 1fr', fontSize: 'clamp(2rem, 8vw, 3rem)' }}>
+            {/* 上の数 */}
+            <div className="col-span-2 text-right pr-2 tracking-wider">
+              {question.vertical.top}
+            </div>
+            {/* 演算子 + 下の数 */}
+            <div className="pr-1 text-gray-500">{question.vertical.operator}</div>
+            <div className="text-right pr-2 tracking-wider">
+              {question.vertical.bottom}
+            </div>
+            {/* 横線 */}
+            <div className={`col-span-2 border-b-4 my-2 ${
+              feedback === 'correct' ? 'border-green-400' :
+              feedback === 'wrong' ? 'border-red-400' :
+              'border-gray-500'
+            }`} />
+            {/* 答え入力 */}
+            <div className="col-span-2 text-right pr-2">
+              <span className={`tracking-wider ${
+                feedback === 'correct' ? 'text-green-600' :
+                feedback === 'wrong' ? 'text-red-600' :
+                'text-indigo-600'
+              }`}>
+                {input || <span className="opacity-30">?</span>}
+              </span>
+            </div>
+          </div>
+        ) : (
+          // 横レイアウト（割り算など）
+          <div className="text-center">
+            <div className="text-5xl font-black text-gray-800 mb-6">{question.expression}</div>
             <div
               className={`inline-block min-w-32 text-5xl font-black text-right px-4 py-2 rounded-2xl border-b-4 ${
                 feedback === 'correct' ? 'border-green-400 text-green-600' :
@@ -149,7 +180,7 @@ export default function GameScreen({ grade, onComplete }: Props) {
               {input || <span className="opacity-30">?</span>}
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Keypad */}
