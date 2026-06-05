@@ -14,9 +14,18 @@ type Props = {
   onChangeGrade: () => void
 }
 
+const GRADE_COLORS: Record<number, string> = {
+  1: 'text-green-600',
+  2: 'text-blue-600',
+  3: 'text-violet-600',
+  4: 'text-orange-600',
+  5: 'text-rose-600',
+  6: 'text-red-600',
+}
+
 export default function ResultScreen({ result, profile, onReplay, onChangeGrade }: Props) {
   const [globalRank, setGlobalRank] = useState<RankInfo | null>(null)
-  const [gradeRank, setGradeRank] = useState<RankInfo | null>(null)
+  const [gradeRanks, setGradeRanks] = useState<Record<number, RankInfo>>({})
   const [isNewBest, setIsNewBest] = useState(false)
   const [saving, setSaving] = useState(true)
   const savedRef = useRef(false)
@@ -42,7 +51,6 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
 
         // ベストスコアのみ保存（既存あればUPDATE、なければINSERT）
         if (existing) {
-          // 既存レコードがある場合：スコアが更新された時だけUPDATE
           if (result.score > prevBest) {
             const { error: updateError } = await supabase
               .from('scores')
@@ -56,7 +64,6 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
             if (updateError) console.error('UPDATE error:', updateError)
           }
         } else {
-          // 初回プレイ：INSERT
           const { error: insertError } = await supabase.from('scores').insert({
             user_id: profile.id,
             user_grade: profile.grade,
@@ -70,7 +77,7 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
           if (insertError) console.error('INSERT error:', insertError)
         }
 
-        // 他ユーザーのベストスコア一覧を取得
+        // 他ユーザーのスコア一覧を取得（自分以外）
         const { data: othersScores } = await supabase
           .from('scores')
           .select('user_id, user_grade, score')
@@ -78,16 +85,23 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
           .neq('user_id', profile.id)
 
         const others = othersScores ?? []
-        const total = others.length + 1
 
-        // 今回のスコアが他ユーザーのベストと比べて何位か
+        // 全体ランキング
+        const globalTotal = others.length + 1
         const globalRankVal = others.filter(s => s.score > result.score).length + 1
-        setGlobalRank({ rank: globalRankVal, total })
+        setGlobalRank({ rank: globalRankVal, total: globalTotal })
 
-        const gradeOthers = others.filter(s => s.user_grade === profile.grade)
-        const gradeTotal = gradeOthers.length + 1
-        const gradeRankVal = gradeOthers.filter(s => s.score > result.score).length + 1
-        setGradeRank({ rank: gradeRankVal, total: gradeTotal })
+        // 学年別ランキング（1〜6年生それぞれ）
+        const ranks: Record<number, RankInfo> = {}
+        for (let g = 1; g <= 6; g++) {
+          const gradeOthers = others.filter(s => s.user_grade === g)
+          // 自分がその学年なら自分もカウント
+          const gradeTotal = gradeOthers.length + (profile.grade === g ? 1 : 0)
+          if (gradeTotal === 0) continue // その学年のプレイヤーがいない
+          const gradeRankVal = gradeOthers.filter(s => s.score > result.score).length + (profile.grade === g ? 1 : 0)
+          ranks[g] = { rank: gradeRankVal, total: gradeTotal }
+        }
+        setGradeRanks(ranks)
 
       } catch (e) {
         console.error(e)
@@ -128,26 +142,38 @@ export default function ResultScreen({ result, profile, onReplay, onChangeGrade 
       {/* Ranking */}
       <div className="bg-white rounded-2xl p-5 w-full shadow mb-6">
         <div className="font-black text-gray-700 mb-1">今回のランキング</div>
-        <div className="text-xs text-gray-400 mb-3">（小{result.gradeChallenge}年生の問題・今回の{result.score}点で）</div>
+        <div className="text-xs text-gray-400 mb-3">（小{result.gradeChallenge}年生の問題・{result.score}点で）</div>
         {saving ? (
           <div className="text-center text-gray-400 py-4">集計中…</div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">🌐 全体</span>
-              {globalRank ? (
-                <span className="font-black text-indigo-600">
-                  {globalRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {globalRank.total}人</span>
-                </span>
-              ) : <span className="text-gray-400 text-sm">—</span>}
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">📚 小{profile.grade}年生の中で</span>
-              {gradeRank ? (
-                <span className="font-black text-purple-600">
-                  {gradeRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {gradeRank.total}人</span>
-                </span>
-              ) : <span className="text-gray-400 text-sm">—</span>}
+          <div className="space-y-2">
+            {/* 学年別 */}
+            {[1,2,3,4,5,6].map(g => {
+              const r = gradeRanks[g]
+              if (!r) return null
+              const isMyGrade = g === profile.grade
+              return (
+                <div key={g} className={`flex items-center justify-between py-1 ${isMyGrade ? 'bg-indigo-50 -mx-2 px-2 rounded-xl' : ''}`}>
+                  <span className="text-sm text-gray-600">
+                    小{g}年生の中で
+                    {isMyGrade && <span className="ml-1 text-xs bg-indigo-100 text-indigo-600 font-bold px-1.5 py-0.5 rounded-full">自分</span>}
+                  </span>
+                  <span className={`font-black ${GRADE_COLORS[g]}`}>
+                    {r.rank}位 <span className="text-gray-400 font-normal text-sm">/ {r.total}人</span>
+                  </span>
+                </div>
+              )
+            })}
+            {/* 仕切り線 */}
+            <div className="border-t border-gray-100 pt-2 mt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-gray-700">🌐 全学年で</span>
+                {globalRank ? (
+                  <span className="font-black text-indigo-600 text-lg">
+                    {globalRank.rank}位 <span className="text-gray-400 font-normal text-sm">/ {globalRank.total}人</span>
+                  </span>
+                ) : <span className="text-gray-400 text-sm">—</span>}
+              </div>
             </div>
           </div>
         )}
